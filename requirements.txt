@@ -6,3 +6,28 @@ faiss-cpu>=1.7.0 # for the FAISS demo
 seaborn>=0.13.0 # for the graphing demo
 fair-llm>=0.1 # fair package
 pytest>=8.0.0
+
+# Deep Learning & Transformers - REQUIRED for HuggingFaceAdapter
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.25.0
+
+# Jupyter Environment (if you want to run in notebooks)
+jupyter>=1.0.0
+notebook>=7.0.0
+ipywidgets>=8.0.0
+
+# Math & Data Processing - REQUIRED
+numpy>=1.24.0
+sympy>=1.12  # For symbolic calculus (AdvancedCalculusTool)
+scipy>=1.10.0  # Often needed for numerical operations
+
+# Visualization
+matplotlib>=3.7.0
+
+reportlab>=4.2.0
+transformers>=4.46.0
+accelerate>=1.0.0
+safetensors>=0.4.5
+reportlab>=4.2.0
+python-dotenv>=1.0.1
