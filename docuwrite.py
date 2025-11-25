@@ -1,201 +1,171 @@
 # docuwrite.py
+#
+# Clean, robust MFR generator using your uploaded OpenAIAdapter.
+# Uses LLM to produce JSON, then MFRPdfTool to render PDF.
+# Falls back to MFRPromptTool if JSON fails.
 
 import os
 import re
 import asyncio
 import json
+
+# Fairlib imports
 from fairlib.core.message import Message
-# (Optional) keep auth clean and avoid stale tokens at import time
+from fairlib import OpenAIAdapter   # <-- YOUR uploaded adapter
+
+# Your custom tools
+from MFRPdfTool import MFRPdfTool
+from MFRPromptTool import MFRPromptTool
+
+# Clean environment variables for HuggingFace
 os.environ.pop("HUGGINGFACE_HUB_TOKEN", None)
 os.environ.pop("HUGGINGFACEHUB_API_TOKEN", None)
 os.environ.pop("HF_TOKEN", None)
 
-from fairlib import (
-    ToolRegistry,
-    ToolExecutor,
-    WorkingMemory,
-    SimpleAgent,
-    RoleDefinition,
-    HuggingFaceAdapter,
-    SimpleReActPlanner,
-)
 
-from MFRPdfTool import MFRPdfTool  # <- lives next to this file (not inside fairlib)  :contentReference[oaicite:3]{index=3}
-from MFRPromptTool import MFRPromptTool
+# -----------------------------------------------------------
+# Build LLM using YOUR OpenAIAdapter (uploaded file)
+# -----------------------------------------------------------
+def build_llm() -> OpenAIAdapter:
+    from dotenv import load_dotenv
+    load_dotenv()   # <-- load .env variables
 
-async def main():
-    """
-    Main entry point for the MFR agent:
-    sets up model, tools, planner, role, and interactive loop.
-    """
-    print("🔧 Initializing the MFR Document Agent...")
-
-    # === (a) Brain: Language Model ===
-    # Use your requested model
-    #llm = HuggingFaceAdapter("HuggingFaceTB/SmolLM3-3B")  # :contentReference[oaicite:4]{index=4}
-    llm = HuggingFaceAdapter("TinyLlama/TinyLlama-1.1B-Chat-v1.0") 
-    # After llm = HuggingFaceAdapter("HuggingFaceTB/SmolLM3-3B")
-    try:
-        llm.set_generation_params(
-            temperature=0.0,
-            do_sample=False,
-            max_new_tokens=200,
-            stop_sequences=["\nThought:", "\nFinal Answer", "\nTool Name:", "\nTool Input:", "\n# "]
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY not found in environment or .env file. "
+            "Please create a .env file with OPENAI_API_KEY=your_key_here"
         )
-    except Exception:
-        pass
 
-
-
-    # === (b) Toolbelt: Register tools ===
-    tool_registry = ToolRegistry()
-
-    # Custom PDF tool
-    mfr_pdf = MFRPdfTool()
-    mfr_prompt = MFRPromptTool()
-    tool_registry.register_tool(mfr_pdf)  # <- previously referenced but not defined  :contentReference[oaicite:5]{index=5}
-    tool_registry.register_tool(mfr_prompt)
-    print(f"✅ Registered tools: {[t.name for t in tool_registry.get_all_tools().values()]}")
-
-    # === (c) Hands: Tool Executor ===
-    executor = ToolExecutor(tool_registry)
-
-    # === (d) Memory ===
-    memory = WorkingMemory()
-
-    # === (e) Mind: Reasoning Engine ===
-    planner = SimpleReActPlanner(llm, tool_registry)
-
-    # === (f) Role: Military official documents expert ===
-    planner.prompt_builder.role_definition = RoleDefinition(
-        "You are an advanced expert in military official documentation whose duty is to draft, review, "
-        "and finalize Memorandums for Record (MFRs) for military officials and cadets.\n"
-        "You must reason step-by-step internally and use tools to act. If a user's request requires "
-        "multiple steps or tools, break the process into sequential actions.\n"
-        "CRITICAL FORMAT RULES:\n"
-        "• When you need to use a tool, respond with EXACTLY two lines and nothing else:\n"
-        "  Action: <tool_name>\n"
-        "  Action Input: <valid minified JSON on one line>\n"
-        "• Do NOT include any other text (no headings, no 'Thought', no 'Tool Name:', no 'Tool Input:').\n"
-        "• Allowed tools: mfr_pdf, mfr_prompt\n"
-        "• For mfr_pdf JSON, include: subject (string), body_paragraphs (array of strings), output_path (string). "
-        "Optional: date, from_line, to_line, suspense, references (array), point_of_contact, "
-        "signature_name, signature_block, signature_extra.\n"
-        "EXAMPLE:\n"
-        "Action: mfr_pdf\n"
-        "Action Input: {\"subject\":\"Parade Coordination\",\"body_paragraphs\":[\"Purpose...\",\"Execution...\",\"Conclusion...\"],\"output_path\":\"outputs/parade_mfr.pdf\"}\n"
-        "Use professional U.S. military correspondence style — clear, concise, mission-appropriate."
+    llm = OpenAIAdapter(
+        api_key=api_key,
+        model_name="gpt-4.1-nano"
     )
+    return llm
 
 
-
-    # === (g) Assemble the Agent ===
-    agent = SimpleAgent(
-        llm=llm,
-        planner=planner,
-        tool_executor=executor,
-        memory=memory,
-        max_steps=10,
-    )
-
-    print("🎓 Agent is ready for MFR drafting.")
-    print("💬 Try natural prompts, e.g.:")
-    print("   • 'Draft an MFR for parade coordination and export to outputs/parade_mfr.pdf'")
-    print("   • 'Create an MFR with subject \"Training Brief\" with 3 bullet paragraphs and save it to outputs/brief.pdf'")
-    print("\nType 'exit' or 'quit' to end the session.")
-    # === (h) Interaction Loop (mirrors the demo) ===  :contentReference[oaicite:6]{index=6}
-    while True:
-        try:
-            user_input = input("👤 You: ")
-            if user_input.lower() in ("exit", "quit"):
-                print("🤖 Agent: Goodbye! 👋")
-                break
-
-            agent_response = await agent.arun(user_input)
-            tool_block = None
-            if isinstance(agent_response, str):
-                tool_block = re.search(
-                    r"(?is)^\s*Action:\s*(\w+)\s*[\r\n]+Action Input:\s*(\{.*\})\s*$",
-                    agent_response.strip()
-                )
-
-            if not tool_block:
-                print("--- Model returned prose or malformed tool call; running JSON→PDF pipeline ---")
-
-                # 🧠 Robustly detect any .pdf path mentioned by user (e.g. "save as a PDF to outputs/cheese.pdf")
-                pdfs = re.findall(r"(\S+\.pdf)", user_input, flags=re.IGNORECASE)
-                output_path = pdfs[-1] if pdfs else "outputs/mfr.pdf"
-                os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-
-                try:
-                    # 1) ask LLM for clean JSON
-                    data = await llm_to_mfr_json(llm, user_input)
-                    # 2) call mfr_pdf directly
-                    res = tool_registry.get_tool("mfr_pdf").run(
-                        subject=data["subject"],
-                        body_paragraphs=data["body_paragraphs"],
-                        output_path=output_path
-                    )
-                    if res.get("ok"):
-                        print(f"✅ PDF written to: {res['path']}")
-                    else:
-                        print(f"❌ PDF generation failed: {res}")
-                except Exception as e:
-                    print(f"❌ JSON→PDF pipeline failed: {e}\nFalling back to MFRPromptTool.")
-                    # last resort: prompt-derived template
-                    res = tool_registry.get_tool("mfr_prompt").run(
-                        prompt=user_input, output_path=output_path
-                    )
-                    if res.get("ok"):
-                        print(f"✅ PDF written to: {res['path']}")
-                    else:
-                        print(f"❌ Fallback failed: {res}")
-                continue
-
-
-
-        except KeyboardInterrupt:
-            print("\n🤖 Agent: Session ended by user.")
-            break
-        except Exception as e:
-            print(f"❌ Agent error: {e}")
-
-async def llm_to_mfr_json(llm, user_prompt: str) -> dict:
-    """Ask the LLM for JSON-only MFR content; return dict with subject/body_paragraphs."""
+# -----------------------------------------------------------
+# Ask LLM to return ONLY JSON for MFR
+# -----------------------------------------------------------
+async def llm_to_mfr_json(llm: OpenAIAdapter, user_prompt: str) -> dict:
     system = (
-        "Return ONLY compact JSON with keys: subject (string), body_paragraphs (array of 3–6 strings). "
-        "No prose. No backticks. No explanations."
+        "You convert natural-language requests into Memorandums for Record (MFRs). "
+        "Respond ONLY with minified JSON using the exact structure:\n"
+        "{"
+        "\"subject\":\"...\","
+        "\"body_paragraphs\":[\"para1\",\"para2\",\"para3\"]"
+        "}"
+        "No backticks, no extra text."
     )
 
     msgs = [
         Message(role="system", content=system),
-        Message(role="user", content=f"Draft an MFR from this request: {user_prompt}"),
+        Message(role="user", content=f"Draft an MFR from this request: {user_prompt}")
     ]
 
-    # Prefer async if available; otherwise use sync in a thread.
-    if hasattr(llm, "acomplete"):
-        raw = await llm.acomplete(msgs)
+    # Use async if available, else sync
+    if hasattr(llm, "ainvoke"):
+        resp = await llm.ainvoke(msgs)
     else:
-        import asyncio
-        raw = await asyncio.to_thread(llm.complete, msgs)
+        loop = asyncio.get_running_loop()
+        resp = await loop.run_in_executor(None, llm.invoke, msgs)
 
-    text = raw if isinstance(raw, str) else str(raw)
-    first_brace = text.find("{")
-    last_brace  = text.rfind("}")
-    if first_brace == -1 or last_brace == -1 or last_brace < first_brace:
-        raise ValueError("LLM did not return JSON")
+    text = resp.content or str(resp)
 
-    import json
-    data = json.loads(text[first_brace:last_brace+1])
-    if not isinstance(data, dict): raise ValueError("JSON not an object")
+    # Extract JSON block
+    first = text.find("{")
+    last = text.rfind("}")
+    if first == -1 or last == -1 or last < first:
+        raise ValueError(f"LLM did not return JSON: {text!r}")
+
+    raw_json = text[first:last+1]
+    data = json.loads(raw_json)
+
+    # Validate
     if "subject" not in data or "body_paragraphs" not in data:
-        raise ValueError("JSON missing required keys")
-    if not isinstance(data["body_paragraphs"], list) or not data["body_paragraphs"]:
-        raise ValueError("body_paragraphs must be a non-empty list")
+        raise ValueError("JSON missing required keys.")
+
+    if not isinstance(data["subject"], str):
+        raise ValueError("'subject' must be a string.")
+
+    if not isinstance(data["body_paragraphs"], list):
+        raise ValueError("'body_paragraphs' must be a list.")
+
     return data
 
 
-# Entrypoint (required so `python docuwrite.py` actually runs)  :contentReference[oaicite:7]{index=7}
+# -----------------------------------------------------------
+# Main interaction loop
+# -----------------------------------------------------------
+async def main():
+    print("🔧 Initializing MFR Document Generator (Clean Rewrite)...")
+
+    # Build LLM
+    try:
+        llm = build_llm()
+        print("✅ OpenAIAdapter initialized.")
+    except Exception as e:
+        print(f"❌ Could not initialize OpenAIAdapter: {e}")
+        print("   Falling back to MFRPromptTool only.")
+        llm = None
+
+    pdf_tool = MFRPdfTool()
+    prompt_tool = MFRPromptTool()
+
+    print("🎓 Ready to create MFRs.")
+    print("Type 'exit' or 'quit' to end.\n")
+
+    while True:
+        try:
+            user_input = input("👤 You: ").strip()
+
+            if user_input.lower() in ("exit", "quit"):
+                print("🤖 Goodbye! 👋")
+                break
+
+            if not user_input:
+                continue
+
+            # Detect PDF output path
+            pdfs = re.findall(r"(\S+\.pdf)", user_input)
+            output_path = pdfs[-1] if pdfs else "outputs/mfr.pdf"
+            os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+            # Try LLM → JSON → PDF first
+            used_fallback = False
+            if llm is not None:
+                try:
+                    data = await llm_to_mfr_json(llm, user_input)
+                    result = pdf_tool.run(
+                        subject=data["subject"],
+                        body_paragraphs=data["body_paragraphs"],
+                        output_path=output_path
+                    )
+                    if result.get("ok"):
+                        print(f"✅ PDF written to: {result['path']}")
+                    else:
+                        used_fallback = True
+                except Exception as e:
+                    print(f"❌ JSON pipeline failed: {e}")
+                    used_fallback = True
+            else:
+                used_fallback = True
+
+            # If LLM fails → fallback
+            if used_fallback:
+                print("↪️ Using fallback MFRPromptTool...")
+                result = prompt_tool.run(prompt=user_input, output_path=output_path)
+                if result.get("ok"):
+                    print(f"✅ PDF written to: {result['path']}")
+                else:
+                    print(f"❌ Fallback failed: {result}")
+
+        except KeyboardInterrupt:
+            print("\n🤖 Session ended by user.")
+            break
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+
+
 if __name__ == "__main__":
     asyncio.run(main())
-
