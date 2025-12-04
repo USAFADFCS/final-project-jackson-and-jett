@@ -31,3 +31,23 @@ accelerate>=1.0.0
 safetensors>=0.4.5
 reportlab>=4.2.0
 python-dotenv>=1.0.1
+
+
+# Core LLM + env
+openai
+python-dotenv
+
+# PDF reading for RAG (Bed Rest SOP MFR)
+pypdf
+
+# PDF generation for MFRs and OPORDs
+reportlab
+
+# Spell checking
+pyspellchecker
+
+# Grammar and style checking
+language-tool-python
+
+# Your agent framework (installed however you normally install it)
+fairlib
