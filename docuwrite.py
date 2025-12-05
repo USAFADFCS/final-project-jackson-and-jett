@@ -1,3 +1,4 @@
+#Doc statement: Used Chatgpt to write and correct code: https://chatgpt.com/share/6932603c-7c0c-8001-9e71-cd07c22f61d9
 # docuwrite.py
 #
 # Interactive CLI for generating MFRs and OPORDs with:
