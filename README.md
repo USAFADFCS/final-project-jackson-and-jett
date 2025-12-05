@@ -1,158 +1,238 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/nwy6MBDZ)
-# FAIR-LLM Installation Guide
+🇺🇸 USAF Document Generator
+Automated MFR & OPORD Writer with RAG, Spell Checking, Grammar Tools, and PDF Output
 
-## 🚀 Quick Installation
+This project provides a fast, reliable way to generate USAF-style Memorandums for Record (MFRs) and 5-paragraph OPERATION ORDERS (OPORDs) using:
 
-### Prerequisites
-- Python 3.8 or higher
-- pip package manager
+OpenAI models (via provided OpenAIAdapter)
 
-### Step 1: Clone the Repository (for demos)
+Retrieval-Augmented Generation (RAG) from real MFRs/OPORDs
 
-```bash
-git clone git@github.com:USAFA-AI-Center/fair_llm_demos.git
-cd fair-llm-demos
-```
+Automatic spell check + grammar correction
 
-### Step 2: Install All Dependencies
+Signature block prompting
 
-Simply install everything needed using the requirements file:
+Professional PDF output using USAF formatting conventions
 
-```bash
+It was developed to support USAFA cadets, young airmen, and junior officers who are expected to write official documents but often lack clear templates, consistent examples, or time to polish formatting.
+
+📌 Why This Project Exists
+
+Cadets and junior officers are frequently required to produce MFRs and OPORDs, yet:
+
+The correct USAF formatting is not consistently taught,
+
+Templates often vary by unit,
+
+Examples can be outdated or buried in SharePoint drives,
+
+And new writers spend unnecessary time guessing the “right” structure.
+
+This tool solves that by:
+
+Giving users clear, consistent, professional-looking documents,
+
+Enforcing USAF writing style through RAG-powered examples,
+
+Eliminating simple errors with spell & grammar checks,
+
+And outputting ready-to-send PDF files.
+
+The goal is to reduce administrative friction and help cadets/officers focus on mission execution, not formatting.
+
+✨ Features
+✔️ MFR Generator
+
+Creates properly structured Memorandums for Record with standard USAF sections such as:
+
+PURPOSE
+
+BACKGROUND
+
+ACTION
+
+CLARIFICATIONS
+
+CONCLUSION
+
+CONTACT
+
+Includes spell check, grammar correction, and signature block automation.
+
+✔️ 5-Paragraph OPORD Generator
+
+Produces OPERATION ORDERS using USAF/DoD-standard format:
+
+Situation
+
+Mission
+
+Execution
+
+Sustainment
+
+Command & Signal
+
+RAG ensures the structure closely resembles real OPORDs (like the NCLS OPORD you provided).
+
+✔️ RAG (Retrieval-Augmented Generation)
+
+Pulls structure and tone from real examples stored in rag_index/index.json, such as:
+
+Bed Rest SOP MFR
+
+NCLS ’24 OPORD
+
+Any additional MFR/OPORD PDFs or text you add
+
+Purpose:
+Maintain consistent USAF writing style and prevent hallucinations.
+
+✔️ Spell Check Tool
+
+Corrects spelling errors in each MFR section using pyspellchecker.
+
+✔️ Grammar Tool (no Java needed)
+
+Runs grammar/style correction through LanguageTool’s public API, avoiding Java installation issues.
+
+✔️ Signature Block Prompt
+
+Users are asked for:
+
+Full name
+
+Rank/Service
+
+Duty title
+
+The tool generates a right-aligned USAF signature block automatically.
+
+✔️ USAF-style PDF Output
+
+PDFs are produced using reportlab, ensuring:
+
+Consistent formatting
+
+Professional look
+
+Standardized structure
+
+PDF is preferred because it's the format most commonly used in official USAF communication.
+
+🧱 Architecture Overview
+flowchart TD
+
+A[User Input CLI] --> B{Detect Document Type}
+B -->|Contains 'opord'| C[LLM + RAG OPORD Builder]
+B -->|Default| D[LLM + RAG MFR Builder]
+
+D --> E[Spell Check Tool]
+E --> F[Grammar Tool]
+F --> G[Signature Prompt]
+
+C --> H[OPORDPdfTool]
+G --> I[MFRPdfTool]
+
+H --> J[PDF Output]
+I --> J[PDF Output]
+
+🔍 How RAG Works
+
+build_rag_index.py loads PDFs and text examples.
+
+Documents are split into text chunks.
+
+Each chunk is embedded with text-embedding-3-small.
+
+At runtime, your query is embedded and compared to the corpus.
+
+The top-matching MFR or OPORD chunks are prepended to the model prompt.
+
+This ensures the model always produces:
+
+Correct structure
+
+Appropriate tone
+
+No hallucinated formats
+
+Realistic USAF-style writing
+
+RAG is the backbone of the project’s consistency.
+
+🛠 Technologies Used
+Component	Purpose
+Python 3.11	Application runtime
+OpenAIAdapter (fairlib)	Provided by instructor for standard LLM interface
+OpenAI GPT-4.1-nano	Default text generation model
+text-embedding-3-small	RAG embeddings
+pypdf	Extracts text from real PDFs
+reportlab	PDF generation (MFR & OPORD)
+pyspellchecker	Spelling correction
+language-tool-python	Grammar correction without Java
+dotenv	Secure API key loading
+🔧 Installation
+1. Clone the repository
+git clone <repo-url>
+cd <repo-folder>
+
+2. Create environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+3. Install dependencies
 pip install -r requirements.txt
-```
 
-This will install:
-- `fair-llm>=0.1` - The core FAIR-LLM package
-- `python-dotenv` - For environment variable management
-- `rich` - For beautiful terminal output
-- `anthropic` - For Anthropic Claude integration
-- `faiss-cpu` - For vector search capabilities
-- `seaborn` - For data visualization
-- `pytest` - For testing
+4. Add your .env
 
-### Step 3: Set Up API Keys
+Create .env:
 
-Create a `.env` file in your project root:
+OPENAI_API_KEY=sk-xxxx
 
-```bash
-# Copy the example file
-cp .env.example .env
+▶️ Usage
+Run the main tool
+python docuwrite.py
 
-# Or create a new one
-echo "OPENAI_API_KEY=your_openai_api_key_here" > .env
-echo "ANTHROPIC_API_KEY=your_anthropic_api_key_here" >> .env
-```
+Example commands
+Create an MFR about squadron dogs for morale and save it to outputs/dogs.pdf
 
-Or export them as environment variables:
+Draft an OPORD for a 5k fun run; save as outputs/funrun.pdf
 
-```bash
-export OPENAI_API_KEY="your_openai_api_key_here"
-export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
-```
 
-### Step 4: Verify Installation
+The program will:
 
-Run the verification script:
+Detect MFR or OPORD
 
-```bash
-python verify_setup.py
-```
+Retrieve relevant examples using RAG
 
-You should see a colorful output showing all components are properly installed!
+Run spell/grammar checks (optional)
 
-## 🎯 Running the Demos
+Prompt for signature info (MFR only)
 
-Once installed, try the demo scripts:
+Output a USAF-ready PDF
 
-### Essay Autograder Demo
-```bash
-# Basic grading
-python demos/demo_committee_of_agents_essay_autograder.py \
-  --essays essay_autograder_files/essays_to_grade/ \
-  --rubric essay_autograder_files/grading_rubric.txt \
-  --output essay_autograder_files/graded_essays/
+👤 Target Audience
 
-# With RAG fact-checking
-python demos/demo_committee_of_agents_essay_autograder.py \
-  --essays essay_autograder_files/essays_to_grade/ \
-  --rubric essay_autograder_files/grading_rubric.txt \
-  --output essay_autograder_files/graded_essays/ \
-  --materials essay_autograder_files/course_materials/
-```
+This tool is built specifically for:
 
-### Code Autograder Demo
-```bash
-# Static analysis only (safer)
-python demos/demo_committee_of_agents_coding_autograder.py \
-  --submissions coding_autograder_files/submissions/ \
-  --rubric coding_autograder_files/rubric.txt \
-  --output coding_autograder_files/reports/ \
-  --no-run
+USAFA Cadets
 
-# With test execution (requires sandbox)
-python demos/demo_committee_of_agents_coding_autograder.py \
-  --submissions coding_autograder_files/submissions/ \
-  --tests coding_autograder_files/tests/test_calculator.py \
-  --rubric coding_autograder_files/rubric.txt \
-  --output coding_autograder_files/reports/
-```
+Young Airmen & Junior Officers
 
-## 📦 Upgrading
+Cadre needing quick document generation
 
-To upgrade to the latest versions:
+Anyone who hasn’t gone through the formal “schoolhouse” training yet
 
-```bash
-# Upgrade all packages
-pip install --upgrade -r requirements.txt
+It ensures new writers can still produce correct, professional, mission-ready documents.
 
-# Or just upgrade fair-llm
-pip install --upgrade fair-llm
-```
+🚀 Roadmap / Future Work
 
-## 🐛 Troubleshooting
+Add DOCX export option
 
-### Missing Dependencies
-If you get import errors, ensure all requirements are installed:
-```bash
-pip install -r requirements.txt --force-reinstall
-```
+Add AFI citation/support tool
 
-### API Key Issues
-The demos will create sample files if they don't exist, but ensure your API keys are set:
-```python
-python -c "import os; print('OpenAI Key:', 'Set' if os.getenv('OPENAI_API_KEY') else 'Not Set')"
-```
+Add Batch OPORD generation for exercises
 
-### Virtual Environment Issues
-Always use a virtual environment to avoid conflicts:
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+Build GUI version for Windows users
 
-## 📚 What's Included
-
-After installation, you'll have:
-- ✅ The complete FAIR-LLM framework
-- ✅ Multi-agent orchestration capabilities
-- ✅ Document processing tools
-- ✅ Vector search with FAISS
-- ✅ Beautiful terminal output with Rich
-- ✅ Complete demo applications
-
-## 🎉 Next Steps
-
-1. Run `python verify_setup.py` to confirm everything is working
-2. Explore the `demos/` folder for examples
-3. Set up and run some demos
-4. Start building your own multi-agent demo files!
-
-## 👥 Contributors
-Developed by the USAFA AI Center team:
-
-Ryan R (rrabinow@uccs.edu)
-Austin W (austin.w@ardentinc.com)
-Eli G (elijah.g@ardentinc.com)
-Chad M (Chad.Mello@afacademy.af.edu)
+Add live collaboration / shareable templates
